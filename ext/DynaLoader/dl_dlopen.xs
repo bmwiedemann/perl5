@@ -73,6 +73,11 @@
      dlerror the error message will be reset to a null pointer. The
      SaveError function is used to save the error as soon as it happens.
 
+     XXX Note that the POSIX standard does not require a per-thread buffer for
+     the error message, and so on multi-threaded builds, it can be overwritten
+     by another thread before SaveError accomplishes its task.  Some systems do
+     have a per-thread buffer.
+
 
    Return Types
    ============
@@ -113,6 +118,10 @@
 
    Note that SaveError() takes a printf format string. Use a "%s" as
    the first parameter if the error may contain any % characters.
+   XXX dlerror() may not be thread-safe on some systems; if this code is run on
+   any of those, a mutex should be added.  khw (who added this comment) has no
+   idea which systems aren't thread-safe, but consider this possibility when
+   debugging.
 
 */
 
