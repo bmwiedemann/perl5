@@ -1,3 +1,5 @@
+=encoding utf8
+
 =head1 NAME
 
 perlxs - XS language reference manual
@@ -2067,6 +2069,80 @@ than a dMY_CTX in another source file.
 
 =head2 Thread-aware system interfaces
 
+When you are writing code that can be used in multithreaded
+applications, there are certain library calls that are unsafe to use.
+For platforms that follow the POSIX standard, ALL calls BUT those
+listed below are supposed to be multi-thread safe.  In the list below:
+
+=over
+
+=item C<÷> means that Perl furnishes a thread-safe version in the POSIX
+modue that you should use instead, using the methods given in
+L<perlcall>.
+
+=item C<@> and C<@@> mean for function I<foo>, there is an equivalent function
+I<fooC<_r>>, available on some platforms, whose result is returned in a
+caller-supplied space, and which is thread-safe.  C<@@> means the
+function is specified in the Posix standard, so it should be available
+on most platforms.  A single C<@> indicates that it is an extension to
+Posix, and so support for it may be more spotty.
+
+If you use the C<"I<foo>_r"> form instead of plain I<foo>, your code should
+be thread-safe with respect to this operation, unless your platform is
+buggy.
+
+=item C<£> and C<££> are like C<@> and C<@@> respectively, but there are
+known platforms where the C<_r> version is thread-safe only if the
+program's global locale is not changed by another thread in the middle
+of this function's execution.  Starting in Perl 5.28, this should not be
+an issue on platforms that have implemented the POSIX 2008 per-thread
+locale functionality.
+
+=item C<¤> is like C<@>, but this function accesses the program's
+environment, and the C<_r> form is thread-safe only if the program's
+environment is not changed by another thread in the middle of this
+function's execution.  These functions should be protected by
+
+ LOCK_ENV
+ ...
+ UNLOCK_ENV
+
+calls surrounding them.  This protection is illusory if other code
+changes the environment without using the same locking mechanism.  The
+perl core does use this mechanism, so any conflicts would have to come
+from another thread that uses XS.
+
+=item C<×> means that these functions should not be generally be used in
+a multi-thread environment, unless only a single thread is calling them.
+There may be C<_r> equivalents defined for them, but these are still
+unsafe.
+
+Some of these iterate over a data strtucture on a per-process basis, NOT
+a per-thread basis.  If the perl core uses these functions, it does not
+protect them, so any locking you might do around the whole iteration
+process will be futile.
+
+cannotis like C<@>, but there are known platforms that are buggy
+and the C<"_r"> forms are still not-thread safe due to some race
+condition.  These XXX WRONG can be made thread-safe by using a mutex to keep them
+from being interrupted, as described below in L<Making thread-safe code>.
+#
+
+Need to look at further:
+grent
+endprotoent	|netdb	|		|I_D|V_D|D=struct protoent_data*
+endpwent	|pwd	|		|I_H|V_H
+endservent	|netdb	|		|I_D|V_D|D=struct servent_data*
+getlogin	|unistd	|char		|I_BW|I_BI|B_BW|B_BI
+getpwent	|pwd	|struct passwd	|I_SBWR|I_SBIR|S_SBW|S_SBI|I_SBI|I_SBIH
+setprotoent I	|netdb	|		|I_ID|V_ID|D=struct protoent_data*
+sethostent I	|netdb	|		|I_ID|V_ID|D=struct hostent_data*
+setpwent	|pwd	|		|I_H|V_H
+setservent I	|netdb	|		|I_ID|V_ID|D=struct servent_data*
+strerror I	|string	|		|I_IBW|I_IBI|B_IBW
+
+=back
+
 Starting from Perl 5.8, in C/C++ level Perl knows how to wrap
 system/library interfaces that have thread-aware versions
 (e.g. getpwent_r()) into frontend macros (e.g. getpwent()) that
@@ -2088,6 +2164,252 @@ well-defined (inconsistent results, data corruption, or even crashes
 become more likely), nor is it very portable.  Unfortunately, not all
 systems have all the C<_r> forms, but using this C<#define> gives you
 whatever protection that Perl is aware is available on each system.
+
+Should change reentr.pl to handle the _r ones listed below that perl
+currently doesn't do, like gmtime, localtime
+
+ asctime()  ££ ¶    XXX use strftime() POSIX 2008 says
+ basename()
+ catgets()
+ crypt()  @ ¶
+ ctermid() if passed a non-NULL argument @ ¶
+ ctime()  ££ ¤ ¶    XXX use strftime() POSIX 2008 says
+ dbm_clearerr()
+ dbm_close()
+ dbm_delete()
+ dbm_error()
+ dbm_fetch()
+ dbm_firstkey()
+ dbm_nextkey()
+ dbm_open()
+ dbm_store()
+ dirname()
+ dlerror()
+ drand48()
+ ecvt()  @
+ encrypt()  @
+ endgrent()  × ¶
+ endhostent()  × ¶
+ endnetent()  × ¶
+ endpwent()  @ ¶
+ endutxent()
+ fcvt()  @
+ ftw()
+ gcvt()  @
+ getchar_unlocked() unless locked by flockfile() or ftrylockfile()
+ getc_unlocked()    unless locked by flockfile() or ftrylockfile()
+ getdate()  §
+ getenv()  ¤
+ getgrent()  × ¶
+ getgrgid()  ££ ¶
+ getgrnam()  ££ ¶
+ gethostbyaddr()  £ ¤ ¶
+ gethostbyname()  £ ¤ ¶
+ gethostent()  × ¶
+ getlogin()  ¶ ¶
+ getnetbyaddr()  £ ¶
+ getnetbyname()  £ ¶
+ getnetent()  £ ¶
+ getopt()  ¤
+ getprotobyname()  £ ¶
+ getprotobynumber()  £ ¶
+ getprotoent()  £ ¶
+ getpwent()  @ ¶
+ getpwnam()  ££ ¶
+ getpwuid()  ££ ¶
+ getservbyname()  £ ¶
+ getservbyport()  £ ¶
+ getservent()  £ ¶
+ getspnam()  £ ¶
+ getutxent()
+ getutxid()
+ getutxline()
+ gmtime()  ££ ¤
+ hcreate()
+ hdestroy()
+ hsearch()
+ inet_ntoa()
+ l64a()
+ lgamma()  @
+ lgammaf()  @
+ lgammal()  @
+ localeconv()  ÷ (for the most common uses, instead use Perl_langinfo() for thread-safety
+                  starting with Perl 5.28, or call the POSIX)
+ localtime()  ££ ¤
+ lrand48()
+ mblen()  ÷ or use mbrlen()
+ mbrlen()     if its 'ps' argument is NULL
+ mbrtowc()    if its 'ps' argument is NULL
+ mbsnrtowcs() if its 'ps' argument is NULL
+ mbsrtowcs()  if its 'ps' argument is NULL
+ mbtowc()  ÷ or use mbrtowc()
+ mrand48()
+ nftw()
+ nl_langinfo()  (instead use Perl_langinfo() for thread-safety
+                 starting with Perl 5.28)
+ ptsname()  @
+ putchar_unlocked() unless locked by flockfile() or ftrylockfile()
+ putc_unlocked()    unless locked by flockfile() or ftrylockfile()
+ putenv()  ¤
+ pututxline()
+ rand()  @@
+ readdir()  @@ ¶
+ readdir64()  @ ¶
+ setenv()  ¤
+ setgrent()  × ¶
+ setkey()  @
+ setlocale()  (instead use Perl_setlocale() for thread-safety starting
+               with Perl 5.28)
+ setnetent()  × ¶
+ setpwent() ¶
+ setutxent()
+ sleep()
+ strerror()  @@ ¶
+ strsignal()
+ strtok()  @@
+ system()
+ tmpnam() if passed a non-NULL argument @ ¶
+ ttyname()  @@ ¶
+ tzset()  ¤ £
+ unsetenv()
+ usleep()
+ wcrtomb()    if its 'ps' argument is NULL
+ wcsnrtombs() if its 'ps' argument is NULL
+ wcsrtombs()  if its 'ps' argument is NULL
+ wcstombs()  ÷ or use wcsrtombs()
+ wctomb()  ÷   or use wcrtombs()
+
+(The list is taken from the POSIX 2001
+and 2008
+(L<http://pubs.opengroup.org/onlinepubs/9699919799/functions/V2_chap02.html#tag_15_09_01>)
+standards, supplemented by the Linux man pages project 4.09
+L<pthreads(7)> and others.)
+
+The above list should be taken as just a starting point, as it is not
+entirely correct, for several reasons.
+
+=over
+
+=item *
+
+Some systems will have additional functions, not defined by Posix, and
+which aren't thread-safe.  For example, any function that gets the value
+of any environment variable will almost certainly be thread-unsafe in
+the presence of another thread changing the environment at the same
+time.
+
+=item *
+
+Some systems have deviated from Posix and have thread-unsafe functions
+that the Standard mandates should be safe.  A big example of this is
+Linux in which many functions, such as any of the C<printf()> variants
+are not safe if the process's global locale is changed by another thread
+in the middle of their execution.  (This is no longer a problem starting
+in Perl 5.28 on systems that have per-thread locales.)
+
+=item *
+
+Any function that returns its result in an internal static area common
+to more than one thread is actually unsafe, whether or not it is on the
+list.  This is because another thread can take control at just the wrong
+moment and change that area before the result can be saved or acted
+upon.  These CANNOT be made thread-safe without cooperation by ALL
+code that could access the static area at the same time in other
+threads.  That cooperation doesn't take much coding work, as described
+below in L</Making thread-safe code>, but the fact remains that one bad
+actor can create a problem.  And you might have trouble convincing the
+maintainers of such code to fix it.  If available, a reentrant version
+of the function should be used instead.  Perl does this automatically
+for many functions if F<perl.h> is C<#include>'d in your code.  The file
+F<regen/reentr.pl> shows all the ones perl currently knows about, not
+all of which are likely to be available on your platform.
+
+And, unfortunately this isn't the whole story.  Some such reentrant
+functions still aren't fully thread-safe.  For example,
+C<nl_langinfo_l()> is supposed to be thread-safe, and that is true if
+plain C<nl_langinfo()> is never called, but the POSIX standard allows an
+implementation to have plain C<nl_langinfo()> overwrite the
+C<nl_langinfo_l> buffer under some circumstances, and vice versa.
+
+=item *
+
+Unfortunately, there are systems that deviate from the POSIX standard
+and implement some unlisted functions unsafely.  The system's
+documentation should specify this, but there are sometimes errors in the
+documentation.
+
+=item *
+
+Some systems may have chosen to implement some of the listed functions
+in a thread-safe manner.  This means that code you have written to work
+around the issue for other systems will be wasted on ones where the
+function is thread-safe.  There are some macros XXX defined to help you
+in this regard.  An example is that some versions of Linux claim to
+implement C<system()> safely
+
+=back
+
+=head2 Making thread-safe code
+
+yield execution until it is complete, and any data it returns that is
+common to the whole program is acted upon or copied to a safe area.
+
+XXX not yet, and this was written under false assumptions
+Perl furnishes macros to do this:
+
+ MT_LOCK;
+ result = MT_savepv(getpwent());
+ MT_UNLOCK;
+
+This makes C<getpwent()> thread-safe.  C<result> needs to be freed at
+some point to prevent a memory leak; you can use either
+
+ MT_Safefree(result)
+
+or
+
+ MT_SAVEFREEPV(result)
+
+depending on your needs. (C<MT> stands for multi-threaded.)
+
+L<C<MT_LOCK>|perlapi/MT_LOCK> starts a critical section, ended by
+L<C<MT_UNLOCK>|perlapi/MT_UNLOCK>, during which only this thread will
+execute.  It should be kept as short as possible to minimize performance
+issues.  On single-threaded builds, no critical sections are needed, and
+these macros become no-ops.
+
+In multi-threaded builds, L<C<MT_savepv>|perlapi/MT_savepv> expands to
+L<C<savepv>|perlapi/savepv>; but on single-threaded ones it is just a
+no-op.  Same with the rest of the macros.  In this way, you can write
+code that works properly on multi-threaded builds, but doesn't do
+unnecessary things on single-threaded.
+
+Of course, you may wish to save the result somewhere else, such as
+specified in L</Safely Storing Static Data in XS>, so you don't have to
+save things like the above example suggests.
+
+Starting from Perl 5.8, Perl can automatically changes calls to
+non-thread-aware functions into the reentrant versions (whose names end
+in C<"_r"> that are available on the system.  It does this by #defining
+a macro (I<e.g.> getpwnam()) that instead calls the thread-aware
+equivalent (C<getpwnam_r()>).  Unfortunately something that is
+thread-aware may not be thread-safe on a given system, in violation of
+the POSIX standard.  An example is L<C<getpwent(3)>>, which on some
+systems is not thread-safe.  The only thing that can be done is to wrap
+calls to things like this in mutexes, as described in the example above
+for C<getpwent>.
+
+This wrapping by Perl happens always when compiling Perl core source
+or the Perl core extensions (when PERL_EXT is #defined).  When compiling XS
+code outside of Perl core the wrapping does not take place.  Note,
+however, that intermixing the C<_r>-forms (as Perl compiled for
+multithreaded operation will do) and the C<_r>-less
+forms is neither well-defined (inconsistent results, data corruption,
+or even crashes become more likely), nor is it very portable.
+XXX
+
+Some of the unsafe functions have safe versions in the L<POSIX> module,
+and accessible from XS code via the methods given in L<perlcall>.
 
 =head1 EXAMPLES
 
